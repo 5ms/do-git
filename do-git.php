@@ -1,6 +1,6 @@
 <?php
 /**
- * Downloader Git Folder v0.0.0.1 (do-git)
+ * Downloader Git Folder v0.0.0.2 (do-git)
  * CLI && WEB version
  *
  * @description Downloader /.git/ (folder/files) repository without --bare
@@ -76,6 +76,7 @@ if (!($signature = fread($fn, 4)) || $signature != 'DIRC') {
 $version  = fread($fn, 4);
 $entries  = fread($fn, 4);
 $complete = 0;
+$failure  = 0;
 
 while (!feof($fn) && $size - ftell($fn) >= 64) {
 
@@ -114,10 +115,15 @@ while (!feof($fn) && $size - ftell($fn) >= 64) {
 	$get .= $file;
 	$target .= $file;
 
-	$data = file_get_contents($get);
-	file_put_contents($target, $data);
-
-	$complete++;
+	if ($data = @file_get_contents($get)) {
+		file_put_contents($target, $data);
+		$complete++;
+	} else {
+		$failure++;
+		if ($log) {
+			echo '[FAIL!] - ' . $nl;
+		}
+	}
 
 	if ($log) {
 		echo $original . ' - ' . $get . '' . $nl;
@@ -126,4 +132,7 @@ while (!feof($fn) && $size - ftell($fn) >= 64) {
 
 fclose($fn);
 
-exit('download: ' . $complete);
+echo 'complete: ' . $complete . $nl;
+if ($failure > 0) {
+	echo 'failure: ' . $failure . $nl;
+}
