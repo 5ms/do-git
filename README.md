@@ -9,8 +9,10 @@ options:
 
 `l - show log (optional)`
 
+`t - TOR (optional)`
+
 ### WEB
-`/do-git.php?u=http://target/.git/&l`
+`/do-git.php?u=http://target/.git/&l&t`
 
 ### CLI
-`php do-git.php -u http://target/.git/ -l`
+`php do-git.php -u http://target/.git/ -l -t`
