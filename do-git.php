@@ -6,7 +6,7 @@
  * @description Downloader /.git/ (folder/files) repository without --bare
  * @author 5ms.ru
  * @link https://github.com/5ms/do-git
- * @date 16.11.2015
+ * @date 20.11.2015
  */
 
 set_time_limit(0);
