@@ -1,12 +1,12 @@
 <?php
 /**
- * Downloader Git Folder v0.0.1.0 (do-git)
+ * Downloader Git Folder v0.0.2.0 (do-git)
  * CLI && WEB version
  *
  * @description Downloader /.git/ (folder/files) repository without --bare
  * @author 5ms.ru
  * @link https://github.com/5ms/do-git
- * @date 20.11.2015
+ * @date 23.11.2015
  */
 
 set_time_limit(0);
@@ -64,19 +64,21 @@ $structure = array(
 );
 
 $dir = './' . $data['host'] . '/';
+$git = $dir . '.git/';
+
 foreach ($structure as $path => $file) {
-	if (!is_dir($dir . $path)) {
-		mkdir($dir . $path, 0777);
-		chmod($dir . $path, 0777);
+	if (!is_dir($git . $path)) {
+		mkdir($git . $path, 0777, true);
+		chmod($git . $path, 0777);
 	}
 	if (!empty($file)) {
 		for ($i = 0, $ic = count($file); $i < $ic; $i++) {
-			if (file_exists($dir . $path . $file[$i]) && filesize($dir . $path . $file[$i]) > 0) {
+			if (file_exists($git . $path . $file[$i]) && filesize($git . $path . $file[$i]) > 0) {
 				continue;
 			}
 			$http_code = 0;
 			if (($data = get(URL . $path . $file[$i], $http_code)) && $http_code == 200) {
-				file_put_contents($dir . $path . $file[$i], $data);
+				file_put_contents($git . $path . $file[$i], $data);
 			}
 			elseif ($file[$i] == 'index') {
 				exit('no .git');
@@ -85,8 +87,8 @@ foreach ($structure as $path => $file) {
 	}
 }
 
-$size = filesize($dir . 'index');
-$fn = fopen($dir . 'index', 'r');
+$size = filesize($git . 'index');
+$fn = fopen($git . 'index', 'r');
 
 if (!($signature = fread($fn, 4)) || $signature != 'DIRC') {
 	exit('.git index is corrupted');
@@ -94,7 +96,8 @@ if (!($signature = fread($fn, 4)) || $signature != 'DIRC') {
 
 $version  = fread($fn, 4);
 $entries  = fread($fn, 4);
-$complete = 0;
+$download = 0;
+$unpacked = 0;
 $failure  = 0;
 $packed   = 0;
 
@@ -118,7 +121,7 @@ while (!feof($fn) && $size - ftell($fn) >= 64) {
 	$subdir = fread($fn, 1);
 
 	$get = URL . 'objects/' . bin2hex($subdir) . '/';
-	$target = $dir . 'objects/' . bin2hex($subdir) . '/';
+	$target = $git . 'objects/' . bin2hex($subdir) . '/';
 
 	if (!is_dir($target)) {
 		mkdir($target, 0777);
@@ -135,18 +138,19 @@ while (!feof($fn) && $size - ftell($fn) >= 64) {
 	$get .= $file;
 	$target .= $file;
 
-	if (!file_exists($target) || filesize($target) == 0) {
+	if (!file_exists($target)) {
 
 		$http_code = 0;
 		$data      = get($get, $http_code);
 
 		if ($http_code == 200) {
 			file_put_contents($target, $data);
-			$complete++;
+			$download++;
 		} elseif ($http_code == 404) {              // if object not found then file packed
+			touch($target);
 			$packed++;
 			if (LOG) {
-				echo '[PACK] - ';
+				echo '[PACKED] - ';
 			}
 		} else {
 			$failure++;
@@ -158,6 +162,20 @@ while (!feof($fn) && $size - ftell($fn) >= 64) {
 		usleep(rand(100000, 1000000));
 	}
 
+	if (file_exists($target)
+		&& filesize($target) > 0
+		&& !file_exists($dir . $original)) {
+
+		if (!is_dir($dir . dirname($original))) {
+			mkdir($dir . dirname($original), 0777, true);
+		}
+
+		file_put_contents($dir . $original, preg_replace('/^([a-z]+ [0-9]+\x00)/', '', gzuncompress(file_get_contents($target))));
+		$unpacked++;
+
+		echo '[UNPACK] - ';
+	}
+
 	if (LOG) {
 		echo $original . ' - ' . $get . '' . $nl;
 	}
@@ -165,7 +183,10 @@ while (!feof($fn) && $size - ftell($fn) >= 64) {
 
 fclose($fn);
 
-echo 'complete: ' . $complete . $nl;
+echo 'download: ' . $download . $nl;
+if ($unpacked > 0) {
+	echo 'unpacked: ' . $unpacked . $nl;
+}
 if ($packed > 0) {
 	echo 'packed: ' . $packed . $nl;
 }
