@@ -1,5 +1,5 @@
 # Do-Git (Downloader Git Folder)
-Downloader .git (folder) repository without --bare
+Downloader && Unpacker .git (folder) repository without --bare
 
 ## Usage
 

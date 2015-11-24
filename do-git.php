@@ -1,9 +1,9 @@
 <?php
 /**
- * Downloader Git Folder v0.0.2.0 (do-git)
+ * Downloader Git Folder v0.0.2.1 (do-git)
  * CLI && WEB version
  *
- * @description Downloader /.git/ (folder/files) repository without --bare
+ * @description Downloader && Unpacker /.git/ (folder/files) repository without --bare
  * @author 5ms.ru
  * @link https://github.com/5ms/do-git
  * @date 23.11.2015
@@ -170,10 +170,18 @@ while (!feof($fn) && $size - ftell($fn) >= 64) {
 			mkdir($dir . dirname($original), 0777, true);
 		}
 
-		file_put_contents($dir . $original, preg_replace('/^([a-z]+ [0-9]+\x00)/', '', gzuncompress(file_get_contents($target))));
-		$unpacked++;
-
-		echo '[UNPACK] - ';
+		if ($data = @gzuncompress(file_get_contents($target))) {
+			file_put_contents($dir . $original, preg_replace('/^[a-z]+ [0-9]+\x00/', '', $data));
+			$unpacked++;
+			if (LOG) {
+				echo '[UNPACK] - ';
+			}
+		} else {
+			if (LOG) {
+				echo '[FAIL UNPACK] - ';
+			}
+			$failure++;
+		}
 	}
 
 	if (LOG) {
